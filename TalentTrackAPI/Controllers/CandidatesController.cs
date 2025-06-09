@@ -1,80 +1,77 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TalentTrackAPI.Data;
 using TalentTrackAPI.Models;
+using TalentTrackAPI.Repositories;
 
-namespace TalentTrackAPI.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class CandidatesController : ControllerBase
+namespace TalentTrackAPI.Controllers
 {
-    private readonly AppDbContext _context;
-
-    public CandidatesController(AppDbContext context)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class CandidatesController : ControllerBase
     {
-        _context = context;
-    }
+        private readonly IRepository<Candidate> _candidateRepository;
 
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<Candidate>>> GetCandidates()
-    {
-        return await _context.Candidates.ToListAsync();
-    }
-
-    [HttpGet("{id}")]
-    public async Task<ActionResult<Candidate>> GetCandidate(int id)
-    {
-        var candidate = await _context.Candidates.FindAsync(id);
-
-        if (candidate == null)
-            return NotFound();
-
-        return candidate;
-    }
-
-    [HttpPost]
-    public async Task<ActionResult<Candidate>> PostCandidate(Candidate candidate)
-    {
-        _context.Candidates.Add(candidate);
-        await _context.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetCandidate), new { id = candidate.Id }, candidate);
-    }
-
-    [HttpPut("{id}")]
-    public async Task<IActionResult> PutCandidate(int id, Candidate candidate)
-    {
-        if (id != candidate.Id)
-            return BadRequest();
-
-        _context.Entry(candidate).State = EntityState.Modified;
-
-        try
+        public CandidatesController(IRepository<Candidate> candidateRepository)
         {
-            await _context.SaveChangesAsync();
+            _candidateRepository = candidateRepository;
         }
-        catch (DbUpdateConcurrencyException)
+
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Candidate>>> GetCandidates()
         {
-            if (!_context.Candidates.Any(e => e.Id == id))
+            var candidates = await _candidateRepository.GetAllAsync();
+            return Ok(candidates);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Candidate>> GetCandidate(int id)
+        {
+            var candidate = await _candidateRepository.GetByIdAsync(id);
+            if (candidate == null)
                 return NotFound();
-            else
-                throw;
+
+            return Ok(candidate);
         }
 
-        return NoContent();
-    }
+        [HttpPost]
+        public async Task<ActionResult<Candidate>> PostCandidate(Candidate candidate)
+        {
+            await _candidateRepository.AddAsync(candidate);
+            await _candidateRepository.SaveChangesAsync();
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteCandidate(int id)
-    {
-        var candidate = await _context.Candidates.FindAsync(id);
-        if (candidate == null)
-            return NotFound();
+            return CreatedAtAction(nameof(GetCandidate), new { id = candidate.Id }, candidate);
+        }
 
-        _context.Candidates.Remove(candidate);
-        await _context.SaveChangesAsync();
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutCandidate(int id, Candidate candidate)
+        {
+            if (id != candidate.Id)
+                return BadRequest();
 
-        return NoContent();
+            var existing = await _candidateRepository.GetByIdAsync(id);
+            if (existing == null)
+                return NotFound();
+
+            existing.FullName = candidate.FullName;
+            existing.Email = candidate.Email;
+            existing.Phone = candidate.Phone;
+
+            _candidateRepository.Update(existing);
+            await _candidateRepository.SaveChangesAsync();
+
+            return Ok(existing);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteCandidate(int id)
+        {
+            var candidate = await _candidateRepository.GetByIdAsync(id);
+            if (candidate == null)
+                return NotFound();
+
+            _candidateRepository.Delete(candidate);
+            await _candidateRepository.SaveChangesAsync();
+
+            return Ok(new { message = $"Candidate with ID {id} was deleted." });
+        }
     }
 }
